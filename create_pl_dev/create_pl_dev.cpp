@@ -38,6 +38,7 @@ static struct pl_device pl_devices[] = {
         {"preloader_raw_b", "/dev/block/sdb"},
         {"preloader_raw_b", "/dev/block/by-name/preloader_raw_a"}
         {"preloader_raw_b", "/dev/block/by-name/preloader_raw_b"}
+#define LINK_PL_A "/dev/block/by-name/preloader_raw_a"
 #define LINK_PL_B "/dev/block/by-name/preloader_raw_b"
 };
 
