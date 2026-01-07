@@ -38,7 +38,7 @@ static struct pl_device pl_devices[] = {
         {"preloader_raw_b", "/dev/block/sdb"},
         {"preloader_raw_b", "/dev/block/by-name/preloader_raw_a"}
         {"preloader_raw_b", "/dev/block/by-name/preloader_raw_b"}
-#define LINK_PL_B "/dev/block/by-name/preloader_raw_b
+#define LINK_PL_B "/dev/block/by-name/preloader_raw_b"
 };
 
 static void create_dm_device(const char* name, const char* dev, int start, int count) {
