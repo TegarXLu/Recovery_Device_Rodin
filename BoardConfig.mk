@@ -190,5 +190,10 @@ TW_NO_HAPTICS := true
 # Indicator
 #TW_CUSTOM_CPU_TEMP_PATH := "/sys/class/thermal/thermal_zone9/temp"
 
+# init_boot ramdisk
+BOARD_VENDOR_RAMDISK_FRAGMENTS := init_boot
+BOARD_VENDOR_RAMDISK_FRAGMENT.init_boot.PREBUILT := $(DEVICE_PATH)/ramdisk.init_boot.lz4
+BOARD_VENDOR_RAMDISK_FRAGMENT.init_boot.MKBOOTIMG_ARGS := --ramdisk_type platform
+
 # Version
 TW_DEVICE_VERSION := rodin-A15-1-TegarXLu
