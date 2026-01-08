@@ -5,121 +5,154 @@
 
 #define LOG_TAG "create_pl_dev"
 
-#include <android-base/unique_fd.h>
-#include <errno.h>
 #include <fcntl.h>
+#include <stdint.h>
+#include <stdio.h>
+#include <sys/ioctl.h>
+#include <sys/stat.h>
+#include <sys/types.h>
+#include <time.h>
+#include <unistd.h>
+
+#include <chrono>
+#include <ctime>
+#include <iostream>
+#include <map>
+#include <thread>
+
+#include <android-base/file.h>
+#include <android-base/strings.h>
+#include <android-base/unique_fd.h>
 #include <libdm/dm.h>
 #include <log/log.h>
-#include <stdio.h>
-#include <string.h>
-#include <unistd.h>
-#include <memory>
-#include <string>
-#include <chrono>
 
-#define BLOCK_SIZE 512
-
-#define EMMC_HSZ 0x800
-#define UFS_HSZ 0x1000
-
-#define COMBO_HEADER_SIZE 4
-#define UFS_HEADER_SIZE 3
-
-#define UFS_HEADER "UFS"
-#define EMMC_HEADER "EMMC"
-#define COMBO_HEADER "COMB"
-
-#define LINK_PL_A "/dev/block/by-name/preloader_raw_a"
-#define LINK_PL_B "/dev/block/by-name/preloader_raw_b"
-
+using namespace std::literals::string_literals;
 using namespace android::dm;
 
-struct pl_device {
-    const char* dm_name;
-    const char* dev;
-};
+#define NAME_PL_A "pl_a"
+#define NAME_PL_B "pl_b"
 
-static const pl_device pl_devices[] = {
-    {"preloader_raw_a", "/dev/block/sda"},
-    {"preloader_raw_b", "/dev/block/sdb"},
-    {"preloader_raw_a", LINK_PL_A},
-    {"preloader_raw_b", LINK_PL_B},
-};
+#define UFS_PL_A "/dev/block/sda"
+#define UFS_PL_B "/dev/block/sdb"
+#define UFS_DEV "/sys/class/block/sda/uevent"
+#define LINK_PL_A "/dev/block/by-name/preloader_raw_a"
+#define LINK_PL_B "/dev/block/by-name/preloader_raw_b"
+#define DM_BLK_SIZE (512)
 
-static void create_dm_device(const char* name, const char* dev, int start, int count) {
-    DeviceMapper& dm = DeviceMapper::Instance();
-    DmTable table;
-    std::unique_ptr<DmTarget> target;
-    std::string path;
+#define PLHEAD "MMM"
+#define UFSHEAD "UFS"
+#define EMMCHEAD "EMMC"
+#define COMBOHEAD "COMB"
+#define EMMCHSZ (0x800)
+#define UFSHSZ (0x1000)
+#define BLKSZ (512)
 
-    target = std::make_unique<DmTargetLinear>(0, count, dev, start);
-    if (!table.AddTarget(std::move(target))) {
-        ALOGE("Failed to add target for %s.", name);
-        return;
-    }
+static int create_dm(const char* device, const char* name, std::string* path, int start_blk,
+                     int blk_cnt) {
+  DmTable table;
+  std::unique_ptr<DmTarget> target;
 
-    if (!dm.CreateDevice(name, table, &path, std::chrono::milliseconds(500))) {
-        ALOGE("Failed to create device %s.", name);
-        return;
-    }
+  if (!device || !name) {
+    ALOGE("%s device or name is null\n", __func__);
+    return 1;
+  }
 
-    ALOGI("Created DM device %s at %s.", name, path.c_str());
+  ALOGD("create_dm dev: %s, name %s, start %d, blks %d\n", device, name, start_blk, blk_cnt);
+  target = std::make_unique<DmTargetLinear>(0, blk_cnt, device, start_blk);
+  if (!table.AddTarget(std::move(target))) {
+    ALOGE("Add target fail(%s)", strerror(errno));
+    return 1;
+  }
+  DeviceMapper& dm = DeviceMapper::Instance();
+  if (!dm.CreateDevice(name, table, path, std::chrono::milliseconds(500))) {
+    ALOGE("Create %s on %s fail(%s)", name, device, strerror(errno));
+    return 1;
+  }
+  ALOGI("Create %s done", (*path).c_str());
+  return 0;
 }
 
-int main() {
-    int fd, size, count, start;
-    char header[COMBO_HEADER_SIZE + 1];
+static void create_pl_link(std::string link, std::string devpath) {
+  std::string link_path;
 
-    for (const auto& device : pl_devices) {
-        if (access(device.dev, F_OK) == -1) {
-            ALOGE("Device %s not found.", device.dev);
-            continue;
-        }
+  if (android::base::Readlink(link, &link_path) && link_path != devpath) {
+    ALOGE("Remove symlink %s links to: %s", link.c_str(), link_path.c_str());
+    if (!android::base::RemoveFileIfExists(link))
+      ALOGE("Cannot remove symlink %s", strerror(errno));
+  }
 
-        fd = open(device.dev, O_RDONLY);
-        if (fd == -1) {
-            ALOGE("Failed to open %s: %s.", device.dev, strerror(errno));
-            continue;
-        }
+  if (symlink(devpath.c_str(), link.c_str()))
+    ALOGE("Failed to symlink %s to %s (%s)", devpath.c_str(), link.c_str(), strerror(errno));
+}
 
-        size = lseek(fd, 0, SEEK_END);
-        if (size == -1) {
-            ALOGE("Failed to seek %s: %s.", device.dev, strerror(errno));
-            close(fd);
-            continue;
-        }
+int create_pl_path(void) {
+  int start_blk, blk_cnt, fd;
+  off_t pl_size;
+  char header_desc[5];
+  std::string path_a, path_b, link_path, dev_path, link;
+  DeviceMapper& dm = DeviceMapper::Instance();
+  ssize_t sz = 0;
 
-        count = size / BLOCK_SIZE;
+  
+  fd = open(UFS_PL_A, O_RDONLY);
+  if (fd < 0) {
+    ALOGE("Cannot open %s (%s)", UFS_PL_A, strerror(errno));
+    return 1;
+  }
 
-        if (lseek(fd, 0, SEEK_SET) == -1) {
-            ALOGE("Failed to seek %s: %s.", device.dev, strerror(errno));
-            close(fd);
-            continue;
-        }
+  pl_size = lseek(fd, 0, SEEK_END);
+  if (pl_size < 0) {
+    ALOGE("lseek fail (%s)", strerror(errno));
+    close(fd);
+    return 1;
+  }
 
-        if (read(fd, header, COMBO_HEADER_SIZE) != COMBO_HEADER_SIZE) {
-            ALOGE("Failed to read %s: %s.", device.dev, strerror(errno));
-            close(fd);
-            continue;
-        }
-        header[COMBO_HEADER_SIZE] = '\0';  // Akhiri string untuk logging yang aman
+  ALOGD("pl_size: %ld\n", pl_size);
+  blk_cnt = pl_size / DM_BLK_SIZE;
 
-        close(fd);
+  if (lseek(fd, 0, SEEK_SET)) {
+    ALOGE("lseek to head fail(%s)\n", strerror(errno));
+    close(fd);
+    return 1;
+  }
 
-        if (strncmp(header, UFS_HEADER, UFS_HEADER_SIZE) == 0 ||
-            strncmp(header, COMBO_HEADER, COMBO_HEADER_SIZE) == 0) {
-            start = UFS_HSZ / BLOCK_SIZE;
-        } else if (strncmp(header, EMMC_HEADER, COMBO_HEADER_SIZE) == 0) {
-            start = EMMC_HSZ / BLOCK_SIZE;
-        } else {
-            ALOGE("Unknown header %s for %s.", header, device.dev);
-            continue;
-        }
+  if ((sz = read(fd, header_desc, sizeof(header_desc))) < 0) {
+    ALOGE("read fail(%s)", strerror(errno));
+    close(fd);
+    return 1;
+  }
+  if (sz != sizeof(header_desc)) ALOGE("%s size is not header_desc\n", __func__);
 
-        count -= start;
+  close(fd);
 
-        create_dm_device(device.dm_name, device.dev, start, count);
-    }
+  header_desc[sizeof(header_desc) - 1] = 0;
+  if (!strncmp(header_desc, EMMCHEAD, strlen(EMMCHEAD))) {
+    start_blk = EMMCHSZ / BLKSZ;
+  } else if (!strncmp(header_desc, UFSHEAD, strlen(UFSHEAD)) ||
+             !strncmp(header_desc, COMBOHEAD, strlen(COMBOHEAD))) {
+    start_blk = UFSHSZ / BLKSZ;
+  } else {
+    ALOGE("Invalid header %s", header_desc);
+    return 1;
+  }
 
-    return 0;
+  blk_cnt -= start_blk;
+  
+  if (create_dm(UFS_PL_A, NAME_PL_A, &path_a, start_blk, blk_cnt) != 0) {
+    return 1;
+  }
+  if (create_dm(UFS_PL_B, NAME_PL_B, &path_b, start_blk, blk_cnt) != 0) {
+    if (dm.DeleteDevice(UFS_PL_A))
+      ALOGE("Cannot delete device %s (%s)", NAME_PL_A, strerror(errno));
+    return 1;
+  }
+  
+
+  create_pl_link(LINK_PL_A, path_a);
+  create_pl_link(LINK_PL_B, path_b);
+  return 0;
+}
+
+int main(void) {
+  return create_pl_path();
 }
