@@ -40,3 +40,11 @@ export FOX_BUILD_TYPE="beta"
 # my avatar
 	export OF_MAINTAINER_AVATAR="$(gettop)/device/xiaomi/rodin/maintainer_avatar.png"
 	cp "${OF_MAINTAINER_AVATAR}" "$(gettop)/bootable/recovery/gui/theme/portrait_hdpi/images/Default/About/maintainer.png"
+	
+	# Important build settings
+export ALLOW_MISSING_DEPENDENCIES=true
+export LC_ALL="C"
+
+# clone gflags
+
+git clone https://android.googlesource.com/platform/external/gflags/ -b android-14.0.0_r75 external/gflags
