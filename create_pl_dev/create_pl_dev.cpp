@@ -13,6 +13,9 @@
 #include <stdio.h>
 #include <string.h>
 #include <unistd.h>
+#include <memory>
+#include <string>
+#include <chrono>
 
 #define BLOCK_SIZE 512
 
@@ -26,6 +29,9 @@
 #define EMMC_HEADER "EMMC"
 #define COMBO_HEADER "COMB"
 
+#define LINK_PL_A "/dev/block/by-name/preloader_raw_a"
+#define LINK_PL_B "/dev/block/by-name/preloader_raw_b"
+
 using namespace android::dm;
 
 struct pl_device {
@@ -33,11 +39,11 @@ struct pl_device {
     const char* dev;
 };
 
-static struct pl_device pl_devices[] = {
-        {"preloader_raw_a", "/dev/block/sda"},
-        {"preloader_raw_b", "/dev/block/sdb"},
-        {"preloader_raw_a", "/dev/block/by-name/preloader_raw_a"}
-        {"preloader_raw_b", "/dev/block/by-name/preloader_raw_b"}
+static const pl_device pl_devices[] = {
+    {"preloader_raw_a", "/dev/block/sda"},
+    {"preloader_raw_b", "/dev/block/sdb"},
+    {"preloader_raw_a", LINK_PL_A},
+    {"preloader_raw_b", LINK_PL_B},
 };
 
 static void create_dm_device(const char* name, const char* dev, int start, int count) {
@@ -62,25 +68,23 @@ static void create_dm_device(const char* name, const char* dev, int start, int c
 
 int main() {
     int fd, size, count, start;
-    char header[COMBO_HEADER_SIZE];
+    char header[COMBO_HEADER_SIZE + 1];
 
-    for (int i = 0; i < sizeof(pl_devices) / sizeof(pl_device); i++) {
-        pl_device* device = &pl_devices[i];
-
-        if (access(device->dev, F_OK) == -1) {
-            ALOGE("Device %s not found.", device->dev);
+    for (const auto& device : pl_devices) {
+        if (access(device.dev, F_OK) == -1) {
+            ALOGE("Device %s not found.", device.dev);
             continue;
         }
 
-        fd = open(device->dev, O_RDONLY);
+        fd = open(device.dev, O_RDONLY);
         if (fd == -1) {
-            ALOGE("Failed to open %s: %s.", device->dev, strerror(errno));
+            ALOGE("Failed to open %s: %s.", device.dev, strerror(errno));
             continue;
         }
 
         size = lseek(fd, 0, SEEK_END);
         if (size == -1) {
-            ALOGE("Failed to seek %s: %s.", device->dev, strerror(errno));
+            ALOGE("Failed to seek %s: %s.", device.dev, strerror(errno));
             close(fd);
             continue;
         }
@@ -88,16 +92,17 @@ int main() {
         count = size / BLOCK_SIZE;
 
         if (lseek(fd, 0, SEEK_SET) == -1) {
-            ALOGE("Failed to seek %s: %s.", device->dev, strerror(errno));
+            ALOGE("Failed to seek %s: %s.", device.dev, strerror(errno));
             close(fd);
             continue;
         }
 
         if (read(fd, header, COMBO_HEADER_SIZE) != COMBO_HEADER_SIZE) {
-            ALOGE("Failed to read %s: %s.", device->dev, strerror(errno));
+            ALOGE("Failed to read %s: %s.", device.dev, strerror(errno));
             close(fd);
             continue;
         }
+        header[COMBO_HEADER_SIZE] = '\0';  // Akhiri string untuk logging yang aman
 
         close(fd);
 
@@ -107,13 +112,13 @@ int main() {
         } else if (strncmp(header, EMMC_HEADER, COMBO_HEADER_SIZE) == 0) {
             start = EMMC_HSZ / BLOCK_SIZE;
         } else {
-            ALOGE("Unknown header %s for %s.", header, device->dev);
+            ALOGE("Unknown header %s for %s.", header, device.dev);
             continue;
         }
 
         count -= start;
 
-        create_dm_device(device->dm_name, device->dev, start, count);
+        create_dm_device(device.dm_name, device.dev, start, count);
     }
 
     return 0;
