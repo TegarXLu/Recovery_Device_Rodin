@@ -41,7 +41,7 @@ $(call inherit-product, vendor/twrp/config/common.mk)
 $(call inherit-product, $(DEVICE_PATH)/fox_rodin.mk)
 
 # API
-PRODUCT_SHIPPING_API_LEVEL := 31
+PRODUCT_SHIPPING_API_LEVEL := 34
 PRODUCT_TARGET_VNDK_VERSION := 35
 
 # Enable Fuse Passthrough
@@ -118,10 +118,10 @@ PRODUCT_PACKAGES += \
 PRODUCT_PACKAGES_DEBUG += \
     bootctrl
 
-# create pl dev
+# mtk plpath utils
 PRODUCT_PACKAGES += \
-    create_pl_dev \
-    create_pl_dev.recovery
+    mtk_plpath_utils \
+    mtk_plpath_utils.recovery
 
 # Copy fstab
 PRODUCT_COPY_FILES += \
