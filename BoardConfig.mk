@@ -14,7 +14,7 @@
 # limitations under the License.
 #
 
-DEVICE_PATH := device/xiaomi/tanzanite
+DEVICE_PATH := device/xiaomi/rodin
 
 # For building with minimal manifest
 ALLOW_MISSING_DEPENDENCIES := true
@@ -48,10 +48,10 @@ ENABLE_CPUSETS := true
 ENABLE_SCHEDBOOST := true
 
 # Assertation
-TARGET_OTA_ASSERT_DEVICE := tanzanite
+TARGET_OTA_ASSERT_DEVICE := rodin
 
 # Bootloader
-TARGET_BOOTLOADER_BOARD_NAME := tanzanite
+TARGET_BOOTLOADER_BOARD_NAME := rodin
 TARGET_NO_BOOTLOADER := true
 
 # Platform
