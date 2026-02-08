@@ -41,7 +41,6 @@ TARGET_2ND_CPU_VARIANT_RUNTIME := cortex-a55
 
 # Arch Suffix
 TARGET_BOARD_SUFFIX := _64
-TARGET_USES_64_BIT_BINDER := true
 TARGET_SUPPORTS_64_BIT_APPS := true
 
 # Power
@@ -148,9 +147,6 @@ TARGET_USERIMAGES_USE_F2FS := true
 
 # Properties
 TARGET_SYSTEM_PROP += $(DEVICE_PATH)/system.prop
-
-# System as root
-BOARD_BUILD_SYSTEM_ROOT_IMAGE := false
 
 # Recovery
 TARGET_NO_RECOVERY := true
