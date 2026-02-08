@@ -15,9 +15,9 @@ mods=(
   xiaomi.ko # has no depends
   stub_scp.ko # stub module to export scp_ipidev symbol
   ft3519t.ko # finally, load the touch driver after loading its dependencies
-  focaltech_touch_rodin.ko #add for rodin
-  xiaomi_touch_rodin.ko #add for rodin
-  goodix_core_rodin #add for rodin
+  focaltech_touch_rodin.ko # add for rodin
+  xiaomi_touch_rodin.ko # add for rodin
+  goodix_core_rodin # add for rodin
 )
 
 # load the modules
